@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StudentCoin – Paper Crypto Trading (India)</title>
+<style>
+:root{--bg:#0f1420;--card:#171e2e;--line:#263049;--tx:#e6eaf3;--mut:#8b96b0;--up:#22c55e;--dn:#ef4444;--ac:#6366f1}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px}
+h1{font-size:18px;margin:0}h1 span{color:var(--ac)}
+.badge{background:#f59e0b22;color:#f59e0b;padding:3px 8px;border-radius:6px;font-size:12px}
+main{display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:16px 20px;max-width:1100px;margin:auto}
+@media(max-width:800px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+h2{font-size:14px;color:var(--mut);margin:0 0 10px;text-transform:uppercase;letter-spacing:.05em}
+table{width:100%;border-collapse:collapse}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}th{color:var(--mut);font-weight:500;font-size:12px}
+tr.sel{background:#6366f122}tr.row{cursor:pointer}
+.up{color:var(--up)}.dn{color:var(--dn)}
+input,select{width:100%;background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:9px;margin:4px 0 10px}
+.btns{display:flex;gap:8px}button{flex:1;border:0;border-radius:8px;padding:10px;font-weight:600;color:#fff;cursor:pointer}
+.buy{background:var(--up)}.sell{background:var(--dn)}.ghost{background:var(--line);flex:0 0 auto;padding:6px 10px;font-size:12px}
+.big{font-size:26px;font-weight:700}.mut{color:var(--mut);font-size:13px}
+canvas{width:100%;height:160px;display:block}
+#msg{min-height:20px;font-size:13px;margin-top:8px}
+.stack{display:flex;flex-direction:column;gap:16px}
+</style></head><body>
+<header><h1>Student<span>Coin</span> <span class="badge">PAPER TRADING · NOT REAL MONEY</span></h1>
+<button class="ghost" onclick="resetAll()">Reset account</button></header>
+<main>
+<div class="stack">
+ <div class="card"><h2>Portfolio value</h2><div class="big" id="total"></div><div class="mut" id="pl"></div></div>
+ <div class="card"><h2>Market (₹ INR)</h2>
+  <table><thead><tr><th>Coin</th><th>Price</th><th>24h</th><th>You hold</th></tr></thead><tbody id="mkt"></tbody></table></div>
+ <div class="card"><h2 id="ctitle">Chart</h2><canvas id="chart" width="700" height="160"></canvas></div>
+ <div class="card"><h2>Trade history</h2><table><thead><tr><th>Time</th><th>Side</th><th>Coin</th><th>Qty</th><th>Price</th></tr></thead><tbody id="hist"></tbody></table></div>
+</div>
+<div class="stack">
+ <div class="card"><h2>Trade <span id="tsym"></span></h2>
+  <div class="mut">Cash: <b id="cash"></b></div>
+  <label class="mut">Amount in ₹</label><input id="amt" type="number" min="0" placeholder="e.g. 5000">
+  <div class="mut" id="est" style="margin-bottom:10px"></div>
+  <div class="btns"><button class="buy" onclick="trade('buy')">Buy</button><button class="sell" onclick="trade('sell')">Sell</button></div>
+  <div id="msg"></div></div>
+ <div class="card"><h2>India tax estimate</h2>
+  <div class="mut">30% on gains (no loss set-off) + 1% TDS on each sell.</div>
+  <p>Realised gains: <b id="gain"></b><br>Tax (30%): <b id="tax"></b><br>TDS paid (1%): <b id="tds"></b></p></div>
+ <div class="card"><h2>Learn</h2><div class="mut">Never invest money you can't afford to lose. Beware of "guaranteed return" groups. Prices here are simulated for practice. Not financial advice.</div></div>
+</div>
+</main>
+<script>
+const COINS=[{s:'BTC',p:5500000,v:.004},{s:'ETH',p:280000,v:.005},{s:'SOL',p:12500,v:.007},{s:'DOGE',p:14,v:.01},{s:'MATIC',p:55,v:.009}];
+const inr=n=>'₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2});
+const KEY='studentcoin_v1';
+let S=JSON.parse(localStorage.getItem(KEY)||'null')||{cash:100000,hold:{},cost:{},gain:0,tds:0,hist:[],prices:null};
+let sel='BTC';const hist={};
+COINS.forEach(c=>{c.price=S.prices?.[c.s]||c.p;c.open=c.price;hist[c.s]=[c.price]});
+const save=()=>{S.prices=Object.fromEntries(COINS.map(c=>[c.s,c.price]));localStorage.setItem(KEY,JSON.stringify(S))};
+function tick(){COINS.forEach(c=>{c.price=Math.max(c.price*(1+(Math.random()-.5)*2*c.v),.01);const h=hist[c.s];h.push(c.price);if(h.length>80)h.shift()});render()}
+function trade(side){
+ const c=COINS.find(x=>x.s==sel),amt=+document.getElementById('amt').value,m=document.getElementById('msg');
+ if(!(amt>0))return say('Enter an amount.',0);
+ const qty=amt/c.price,held=S.hold[sel]||0;
+ if(side=='buy'){
+  if(amt>S.cash)return say('Not enough cash.',0);
+  S.cash-=amt;S.cost[sel]=(S.cost[sel]||0)+amt;S.hold[sel]=held+qty;
+ }else{
+  if(qty>held+1e-12)return say('You don\'t hold that much.',0);
+  const avg=S.cost[sel]/held,costBasis=avg*qty,tds=amt*.01;
+  S.cash+=amt-tds;S.tds+=tds;S.gain+=amt-costBasis;S.cost[sel]-=costBasis;S.hold[sel]=held-qty;
+ }
+ S.hist.unshift({t:new Date().toLocaleTimeString(),side,s:sel,qty,price:c.price});S.hist=S.hist.slice(0,15);
+ say(side.toUpperCase()+' '+qty.toFixed(6)+' '+sel+' done.',1);save();render();
+}
+function say(t,ok){const m=document.getElementById('msg');m.textContent=t;m.className=ok?'up':'dn'}
+function resetAll(){if(confirm('Reset to ₹1,00,000?')){localStorage.removeItem(KEY);location.reload()}}
+function drawChart(){
+ const cv=document.getElementById('chart'),g=cv.getContext('2d'),d=hist[sel],w=cv.width,h=cv.height;
+ g.clearRect(0,0,w,h);if(d.length<2)return;
+ const mn=Math.min(...d),mx=Math.max(...d),r=mx-mn||1;
+ g.strokeStyle=d.at(-1)>=d[0]?'#22c55e':'#ef4444';g.lineWidth=2;g.beginPath();
+ d.forEach((v,i)=>{const x=i/(d.length-1)*w,y=h-8-(v-mn)/r*(h-16);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
+}
+function render(){
+ let hv=0;COINS.forEach(c=>hv+=(S.hold[c.s]||0)*c.price);
+ const tot=S.cash+hv,pl=tot-100000;
+ total.textContent=inr(tot);pl_.textContent='';
+ document.getElementById('pl').innerHTML=`<span class="${pl>=0?'up':'dn'}">${pl>=0?'▲':'▼'} ${inr(Math.abs(pl))}</span> since start`;
+ cash.textContent=inr(S.cash);
+ mkt.innerHTML=COINS.map(c=>{const ch=(c.price/c.open-1)*100;
+  return `<tr class="row ${c.s==sel?'sel':''}" onclick="sel='${c.s}';render()"><td><b>${c.s}</b></td><td>${inr(c.price)}</td><td class="${ch>=0?'up':'dn'}">${ch.toFixed(2)}%</td><td>${(S.hold[c.s]||0).toFixed(5)}</td></tr>`}).join('');
+ tsym.textContent='· '+sel;ctitle.textContent=sel+' live (simulated)';
+ const a=+amt.value,c=COINS.find(x=>x.s==sel);est.textContent=a>0?`≈ ${(a/c.price).toFixed(6)} ${sel} (sell TDS: ${inr(a*.01)})`:'';
+ gain.textContent=inr(S.gain);tax.textContent=inr(Math.max(S.gain,0)*.3);tds.textContent=inr(S.tds);
+ hist_.innerHTML=S.hist.map(o=>`<tr><td>${o.t}</td><td class="${o.side=='buy'?'up':'dn'}">${o.side}</td><td>${o.s}</td><td>${o.qty.toFixed(5)}</td><td>${inr(o.price)}</td></tr>`).join('');
+ drawChart();
+}
+const total=document.getElementById('total'),pl_={},cash=document.getElementById('cash'),mkt=document.getElementById('mkt'),tsym=document.getElementById('tsym'),ctitle=document.getElementById('ctitle'),est=document.getElementById('est'),amt=document.getElementById('amt'),gain=document.getElementById('gain'),tax=document.getElementById('tax'),tds=document.getElementById('tds'),hist_=document.getElementById('hist');
+amt.addEventListener('input',render);
+render();setInterval(tick,1500);
+</script></body></html>
